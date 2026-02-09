@@ -1,0 +1,5 @@
+package br.com.medic.controller;
+
+public class PacienteController {
+
+}

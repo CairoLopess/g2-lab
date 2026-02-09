@@ -1,0 +1,10 @@
+package br.com.medic.dto;
+
+import jakarta.validation.constraints.NotBlank;
+
+public record DadosCadastroPacienteDto(
+    @NotBlank String nome,
+    String cpf,
+    String telefone,
+    String email
+) {}
