@@ -1,5 +1,0 @@
-package br.com.medic.security;
-
-public class TokenService {
-
-}

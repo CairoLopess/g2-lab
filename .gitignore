@@ -1,0 +1,17 @@
+# IDE
+.metadata/
+.idea/
+.vscode/
+
+# Node
+node_modules/
+dist/
+.next/
+
+# Java
+target/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

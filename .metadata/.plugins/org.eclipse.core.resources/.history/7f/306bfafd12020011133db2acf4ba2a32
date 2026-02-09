@@ -1,5 +1,0 @@
-package br.com.medic.dto;
-
-public record DadosAutenticacao() {
-
-}
