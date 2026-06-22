@@ -248,16 +248,15 @@ export default function MedicDashboard() {
   };
 
   useEffect(() => {
-    if (isRecording && fullTranscriptRef.current.length > 30) {
-      if (copilotoTimeoutRef.current) clearTimeout(copilotoTimeoutRef.current);
-      copilotoTimeoutRef.current = setTimeout(() => {
-        chamarCopiloto();
+    if (isRecording) {
+      const interval = setInterval(() => {
+        if (fullTranscriptRef.current.length > 30) {
+          chamarCopiloto();
+        }
       }, 15000);
+      return () => clearInterval(interval);
     }
-    return () => {
-      if (copilotoTimeoutRef.current) clearTimeout(copilotoTimeoutRef.current);
-    };
-  }, [transcript, isRecording]);
+  }, [isRecording]);
 
   const salvarRascunho = async () => {
     setIsSavingDraft(true);
