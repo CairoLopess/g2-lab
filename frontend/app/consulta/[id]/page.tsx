@@ -837,7 +837,7 @@ const Accordion = ({ title, isOpen = false, children }: AccordionProps) => {
         <ChevronDown size={18} className={`transition-transform ${open ? 'rotate-180 text-[#0fc679]' : 'text-slate-300'}`} />
       </button>
       {open && children && (
-        <div className="px-4 pb-4 pt-0 max-h-[150px] overflow-y-auto custom-scrollbar">{children}</div>
+        <div className="px-4 pb-4 pt-0">{children}</div>
       )}
     </div>
   );
