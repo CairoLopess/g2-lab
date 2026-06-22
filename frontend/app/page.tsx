@@ -3,8 +3,8 @@
     import { useState, useEffect } from 'react';
     import { useRouter } from 'next/navigation';
     import { 
-    Search, Users, Calendar, ArrowRight, 
-    Clock, UserPlus, FileText, Home, Database, Bell, Settings, X, Loader2, Save, User, Edit3, History
+    Search, Users, Calendar, ArrowRight,
+    Clock, UserPlus, FileText, Home, Database, Bell, Settings, X, Loader2, Save, User, Edit3, History, LogOut
     } from 'lucide-react';
 
     // --- INTERFACES ---
@@ -263,6 +263,13 @@
         }
     };
 
+    const handleLogout = () => {
+        localStorage.removeItem('medic_token');
+        localStorage.removeItem('medic_nome');
+        localStorage.removeItem('medic_id');
+        router.push('/login');
+    };
+
     // Se estiver checando o token, não mostra nada (ou um loader de tela cheia)
     if (isCheckingToken) {
         return (
@@ -311,6 +318,13 @@
                     <div className="w-10 h-10 rounded-full bg-[#00c985]/10 flex items-center justify-center text-[#00c985]">
                             <User size={20} />
                     </div>
+                    <button
+                        onClick={handleLogout}
+                        title="Sair"
+                        className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                    >
+                        <LogOut size={18} />
+                    </button>
                     </div>
                 </div>
             </header>
