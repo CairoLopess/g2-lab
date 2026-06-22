@@ -1,6 +1,5 @@
 package br.com.medic.security;
 
-
 import br.com.medic.repository.MedicoRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -28,13 +27,16 @@ public class SecurityFilter extends OncePerRequestFilter {
         var tokenJWT = recuperarToken(request);
 
         if (tokenJWT != null) {
-            var subject = tokenService.getSubject(tokenJWT); // Pega o email do token
-            var medico = repository.findByEmail(subject); // Busca no banco (crie esse método no Repo se não tiver)
+            try {
+                var subject = tokenService.getSubject(tokenJWT);
+                var medico = repository.findByEmail(subject);
 
-        
-            if (medico != null) {
-                var authentication = new UsernamePasswordAuthenticationToken(medico, null, medico.getAuthorities());
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                if (medico != null) {
+                    var authentication = new UsernamePasswordAuthenticationToken(medico, null, medico.getAuthorities());
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
+            } catch (Exception e) {
+                System.out.println("Erro ao validar token no filtro: " + e.getMessage());
             }
         }
 
@@ -44,7 +46,7 @@ public class SecurityFilter extends OncePerRequestFilter {
     private String recuperarToken(HttpServletRequest request) {
         var authorizationHeader = request.getHeader("Authorization");
         if (authorizationHeader != null) {
-            return authorizationHeader.replace("Bearer ", "");
+            return authorizationHeader.replace("Bearer ", "").trim();
         }
         return null;
     }

@@ -23,8 +23,8 @@ public class TokenService {
             Algorithm algoritmo = Algorithm.HMAC256(secret);
             return JWT.create()
                     .withIssuer("API Medic.AI")
-                    .withSubject(medico.getEmail()) // Quem é o dono do token
-                    .withClaim("id", medico.getId().toString()) // Guardamos o ID dentro do token
+                    .withSubject(medico.getEmail())
+                    .withClaim("id", medico.getId().toString())
                     .withExpiresAt(dataExpiracao())
                     .sign(algoritmo);
         } catch (JWTCreationException exception) {

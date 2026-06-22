@@ -10,7 +10,7 @@ public record DadosCadastroMedicoDto(
     
     @NotBlank
     @Email
-    String email,
+    String email,	
     
     @NotBlank
     String crm,

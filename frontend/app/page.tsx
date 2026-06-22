@@ -1,454 +1,553 @@
-'use client';
+    'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { Mic, Square, FileText, Activity, User, ClipboardList, Loader2, TestTube2, Printer, LogOut, Users, Plus, ChevronRight, Search } from 'lucide-react';
+    import { useState, useEffect } from 'react';
+    import { useRouter } from 'next/navigation';
+    import { 
+    Search, Users, Calendar, ArrowRight, 
+    Clock, UserPlus, FileText, Home, Database, Bell, Settings, X, Loader2, Save, User, Edit3, History
+    } from 'lucide-react';
 
-export default function Home() {
-  const router = useRouter();
-  
-  // --- ESTADOS GERAIS ---
-  const [medicoId, setMedicoId] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  
-  // --- ESTADOS DE PACIENTE ---
-  const [pacientes, setPacientes] = useState<Paciente[]>([]);
-  const [pacienteId, setPacienteId] = useState<number | null>(null); // Paciente selecionado
-  const [pacienteSelecionadoNome, setPacienteSelecionadoNome] = useState<string>(""); 
-
-  // Novo Paciente
-  const [isCreatingPaciente, setIsCreatingPaciente] = useState(false);
-  const [novoNome, setNovoNome] = useState("");
-  const [novoCpf, setNovoCpf] = useState("");
-
-  // --- ESTADOS DA CONSULTA (Gravador) ---
-  const [isRecording, setIsRecording] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [consultaId, setConsultaId] = useState<number | null>(null);
-
-  const [documentoFinal, setDocumentoFinal] = useState<string>("");
-  const [loadingDoc, setLoadingDoc] = useState(false);
-
-  interface Prontuario {
-    transcricao?: string;
-    queixaPrincipal?: string;
-    hda?: string;
-    medicamentosEmUso?: string;
-    alergias?: string;
-    conduta?: string;
-    antecedentesPessoais?: string;
-    historicoFamiliar?: string;
-    habitos?: string;
-    exameFisico?: string;
-    hipoteseDiagnostica?: string;
-    examesSolicitados?: string;
-    anamneseFormatada?: string; 
-    [key: string]: string | undefined;
-  }
-
-  interface Paciente {
+    // --- INTERFACES ---
+    interface Paciente {
     id: number;
     nome: string;
-    cpf?: string;
-    telefone?: string;
+    cpf: string;
     email?: string;
-  }
-  
-  const [prontuario, setProntuario] = useState<Prontuario | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
-
-  // --- AUTH ---
-  const logout = useCallback(() => {
-    localStorage.removeItem('medic_token');
-    router.push('/login');
-  }, [router]);
-
-  useEffect(() => {
-    const storedToken = localStorage.getItem('medic_token');
-    if (!storedToken) { router.push('/login'); return; }
-    setToken(storedToken);
-
-    try {
-        const base64Url = storedToken.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-        const decoded = JSON.parse(jsonPayload);
-        setMedicoId(decoded.id); 
-    } catch (e) {
-        console.error("Token inválido", e);
-        logout();
+    telefone?: string;
+    sexo?: string; 
+    idade?: number; 
+    ultimaConsulta?: string;
+    status?: string;
+    avatar?: string;
     }
-  }, [router, logout]);
 
-  // --- BUSCA DE PACIENTES (Assim que logar) ---
-  useEffect(() => {
-    if (token) {
-        fetchPacientes();
+    interface ConsultaHistorico {
+    id: number;
+    dataConsulta: string; 
+    status: string; 
     }
-  }, [token]);
 
-  const fetchPacientes = async () => {
+    interface StatCardProps {
+    title: string;
+    value: string;
+    icon: React.ReactNode;
+    bg: string;
+    }
+
+    interface NavItemProps {
+    icon: React.ReactNode;
+    active?: boolean;
+    hasDot?: boolean;
+    }
+
+    // --- CONFIG ---
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+
+    export default function HomePacientes() {
+    const router = useRouter();
+    const [medicoNome, setMedicoNome] = useState("Doutor");
+    const [searchTerm, setSearchTerm] = useState("");
+    
+    // Estados de Carregamento e Dados
+    const [isCheckingToken, setIsCheckingToken] = useState(true); // Novo estado para evitar "flash" de conteúdo
+    const [pacientes, setPacientes] = useState<Paciente[]>([]);
+    const [isLoadingList, setIsLoadingList] = useState(true);
+
+    const [isHistoricoModalOpen, setIsHistoricoModalOpen] = useState(false);
+    const [pacienteSelecionado, setPacienteSelecionado] = useState<Paciente | null>(null);
+    const [historicoConsultas, setHistoricoConsultas] = useState<ConsultaHistorico[]>([]);
+    const [isLoadingHistorico, setIsLoadingHistorico] = useState(false);
+    
+    // Estados de Ação
+    const [isStartingConsulta, setIsStartingConsulta] = useState<number | null>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    
+    const [novoPaciente, setNovoPaciente] = useState({
+        nome: "",
+        cpf: "",
+        email: "",
+        telefone: "",
+        sexo: "Masculino",
+        dataNascimento: "" 
+    });
+
+    // --- 1. VERIFICAÇÃO DE SEGURANÇA E CARREGAMENTO ---
+    useEffect(() => {
+        const token = localStorage.getItem('medic_token');
+        
+        // Se não tem token, tchau imediato
+        if (!token) {
+            router.push('/login');
+            return;
+        }
+
+        setIsCheckingToken(false);
+        setMedicoNome(localStorage.getItem('medic_nome') || "Doutor");
+        fetchPacientes(token);
+    }, []);
+
+    const fetchPacientes = async (token: string) => {
+        try {
+            const res = await fetch(`${API_URL}/pacientes`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            // --- AQUI ESTÁ A CORREÇÃO DE SEGURANÇA ---
+            if (res.status === 403 || res.status === 401) {
+                console.warn("Token expirado ou inválido. Redirecionando...");
+                localStorage.removeItem('medic_token'); // Limpa o lixo
+                localStorage.removeItem('medic_nome');
+                localStorage.removeItem('medic_id');
+                router.push('/login');
+                return;
+            }
+            // ------------------------------------------
+            
+            if (res.ok) {
+                const data = await res.json() as Paciente[];
+                const pacientesTratados = data.map((p) => ({
+                    ...p,
+                    status: p.status || 'Ativo',
+                    avatar: p.id ? String(p.id % 15) : "1",
+                    ultimaConsulta: p.ultimaConsulta || '-',
+                    sexo: p.sexo || 'Não informado',
+                    idade: p.idade || 0 
+                }));
+                setPacientes(pacientesTratados);
+            }
+        } catch (e) {
+            console.error("Erro ao buscar pacientes", e);
+        } finally {
+            setIsLoadingList(false);
+        }
+    };
+
+    const handleAbrirHistorico = async (paciente: Paciente) => {
+        setPacienteSelecionado(paciente);
+        setIsHistoricoModalOpen(true);
+        setIsLoadingHistorico(true);
+        
+        try {
+            const token = localStorage.getItem('medic_token');
+            const res = await fetch(`${API_URL}/consultas/paciente/${paciente.id}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setHistoricoConsultas(data);
+            }
+        } catch (e) {
+            console.error("Erro ao buscar histórico", e);
+        } finally {
+            setIsLoadingHistorico(false);
+        }
+    };
+
+    // --- 2. FILTRAGEM NO FRONTEND ---
+    const filteredPacientes = pacientes.filter(p => 
+        p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.cpf.includes(searchTerm)
+    );
+
+    // --- 3. AÇÃO: INICIAR CONSULTA ---
+    const handleIniciarConsulta = async (pacienteId: number) => {
+    setIsStartingConsulta(pacienteId);
     try {
-        const res = await fetch('http://localhost:8080/pacientes', {
+        const token = localStorage.getItem('medic_token');
+        if (!token) { router.push('/login'); return; }
+
+
+        const medicoId = localStorage.getItem('medic_id');
+
+        const res = await fetch(`${API_URL}/consultas/iniciar?pacienteId=${pacienteId}&medicoId=${medicoId}`, {
+            method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (res.ok) {
-            setPacientes(await res.json());
+
+            if (res.status === 403 || res.status === 401) {
+                localStorage.removeItem('medic_token');
+                router.push('/login');
+                return;
+            }
+
+            if (res.ok) {
+                const data = await res.json();
+                router.push(`/consulta/${data.id}`); 
+            } else {
+                alert("Erro ao iniciar consulta.");
+            }
+
+        } catch (e) {
+            console.error(e);
+            alert("Erro de conexão.");
+        } finally {
+            setIsStartingConsulta(null);
         }
-    } catch (e) {
-        console.error("Erro ao buscar pacientes", e);
-    }
-  };
+    };
 
-  const handleCriarPaciente = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!token) return;
-
-    try {
-        const res = await fetch('http://localhost:8080/pacientes', {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` 
-            },
-            body: JSON.stringify({ nome: novoNome, cpf: novoCpf })
-        });
-
-        if (res.ok) {
-            const novo = await res.json();
-            setPacientes([...pacientes, novo]); // Adiciona na lista
-            setPacienteId(novo.id); // Já seleciona ele
-            setPacienteSelecionadoNome(novo.nome);
-            setIsCreatingPaciente(false); // Fecha modal
-            setNovoNome(""); setNovoCpf("");
-        } else {
-            alert("Erro ao criar paciente");
-        }
-    } catch (e) {
-        alert("Erro de conexão");
-    }
-  };
-
-  const selecionarPaciente = (p: Paciente) => {
-      setPacienteId(p.id);
-      setPacienteSelecionadoNome(p.nome);
-      // Limpa dados de consulta anterior se houver
-      setConsultaId(null);
-      setProntuario(null);
-      setDocumentoFinal("");
-  };
-
-  const trocarPaciente = () => {
-      setPacienteId(null);
-      setConsultaId(null);
-      setProntuario(null);
-  };
-
-  // --- FUNÇÕES DE GRAVAÇÃO (IGUAIS, MAS USANDO pacienteId STATE) ---
-  const startRecording = async () => {
-    if (!medicoId || !token || !pacienteId) return;
-
-    try {
-      const res = await fetch(`http://localhost:8080/consultas/iniciar?pacienteId=${pacienteId}&medicoId=${medicoId}`, { 
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (!res.ok) throw new Error("Erro ao iniciar consulta.");
-      const data = await res.json();
-      setConsultaId(data.id);
-      
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      
-      mediaRecorder.onstop = async () => {
-        setIsProcessing(true);
+    // --- 4. AÇÃO: SALVAR NOVO PACIENTE ---
+    const handleSalvarPaciente = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSaving(true);
+        
         try {
-          const blob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-          const formData = new FormData();
-          formData.append("audio", blob, "audio.wav");
-          
-          const uploadRes = await fetch(`http://localhost:8080/consultas/${data.id}/upload`, { 
-            method: 'POST', 
-            headers: { 'Authorization': `Bearer ${token}` },
-            body: formData 
-          });
-          
-          if (!uploadRes.ok) throw new Error("Erro no upload.");
-          setProntuario(await uploadRes.json());
-        } catch (error) { 
-           alert("Erro no processamento."); 
-        } finally { 
-          setIsProcessing(false); 
-          streamRef.current?.getTracks().forEach(t => t.stop());
-          setIsRecording(false);
+            const token = localStorage.getItem('medic_token');
+            if (!token) { 
+                router.push('/login'); 
+                return; 
+            }
+
+            // ✅ LIMPA O CPF (remove pontos e traço)
+            const cpfLimpo = novoPaciente.cpf.replace(/\D/g, '');
+
+            const res = await fetch(`${API_URL}/pacientes`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    ...novoPaciente,
+                    cpf: cpfLimpo // ✅ envia CPF só com números
+                })
+            });
+
+            if (res.status === 403 || res.status === 401) {
+                localStorage.removeItem('medic_token');
+                router.push('/login');
+                return;
+            }
+
+            if (res.ok) {
+                alert("Paciente cadastrado com sucesso!");
+                setIsModalOpen(false);
+                setNovoPaciente({ 
+                    nome: "", 
+                    cpf: "", 
+                    email: "", 
+                    telefone: "", 
+                    sexo: "Masculino", 
+                    dataNascimento: "" 
+                }); 
+                fetchPacientes(token); 
+            } else {
+                const erro = await res.text();
+                alert(`Erro ao cadastrar: ${erro}`);
+            }
+
+        } catch (err) {
+            console.error(err);
+            alert("Erro de conexão com o servidor.");
+        } finally {
+            setIsSaving(false);
         }
-      };
+    };
 
-      mediaRecorder.start();
-      setIsRecording(true);
-      setProntuario(null);
-      setDocumentoFinal("");
-    } catch (error) { 
-        alert("Erro ao iniciar gravação."); 
+    // Se estiver checando o token, não mostra nada (ou um loader de tela cheia)
+    if (isCheckingToken) {
+        return (
+            <div className="flex h-screen w-full items-center justify-center bg-[#f8fafc]">
+                <Loader2 className="animate-spin text-[#00c985]" size={48} />
+            </div>
+        );
     }
-  };
 
-  const stopRecording = () => mediaRecorderRef.current?.stop();
+    return (
+        <div className="flex h-screen w-full bg-[#f8fafc] font-sans text-slate-600 selection:bg-[#0fc679]/20 overflow-hidden">
+        
+        {/* SIDEBAR */}
+        <aside className="hidden md:flex flex-col items-center gap-6 w-[72px] z-20 fixed left-6 top-10">
+            <nav className="flex flex-col gap-2 w-full py-4 items-center bg-[#3ed28c] rounded-[40px] shadow-[0_8px_30px_rgba(62,210,140,0.25)]">
+            <NavItem icon={<Home size={24} strokeWidth={2} />} active={true} />
+            <NavItem icon={<Database size={24} strokeWidth={2} />} />
+            </nav>
+            <nav className="flex flex-col gap-2 w-full py-4 items-center bg-[#3ed28c] rounded-[40px] shadow-[0_8px_30px_rgba(62,210,140,0.25)]">
+            <NavItem icon={<Bell size={24} strokeWidth={2} />} hasDot={true} />
+            <NavItem icon={<Settings size={24} strokeWidth={2} />} />
+            </nav>
+        </aside>
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!consultaId || !token) return;
-    try {
-      const res = await fetch(`http://localhost:8080/consultas/${consultaId}/finalizar`, {
-        method: 'PUT',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(prontuario)
-      });
-      if (res.ok) { 
-          alert("✅ Salvo!"); 
-          // Não recarrega a página, apenas limpa para próxima consulta ou mantém
-      }
-    } catch (error) { alert("Erro ao salvar."); }
-  };
-
-  const handleInputChange = (field: string, value: string) => {
-    setProntuario((prev) => prev ? ({ ...prev, [field]: value }) : null);
-  };
-
-  const gerarLaudoSincronizado = () => {
-    if (!prontuario) return;
-    setLoadingDoc(true);
-    const historiaClinica = prontuario.anamneseFormatada || `Paciente comparece referindo ${prontuario.queixaPrincipal || ''}. ${prontuario.hda || ''}`;
-    const textoFinal = `
-CLÍNICA MÉDICA INTEGRADA
--------------------------------------------------------------------------
-PACIENTE: ${pacienteSelecionadoNome} (ID: ${pacienteId})
-DATA: ${new Date().toLocaleDateString()}
--------------------------------------------------------------------------
-
-1. ANAMNESE E HISTÓRIA CLÍNICA
-${historiaClinica}
-
-2. ANTECEDENTES E HÁBITOS
-${prontuario.antecedentesPessoais ? `Ant. Pessoais: ${prontuario.antecedentesPessoais}` : ''}
-${prontuario.historicoFamiliar ? `Hist. Familiar: ${prontuario.historicoFamiliar}` : ''}
-${prontuario.habitos ? `Hábitos: ${prontuario.habitos}` : ''}
-${!prontuario.antecedentesPessoais && !prontuario.habitos ? 'Nada digno de nota.' : ''}
-
-3. EXAME FÍSICO
-${prontuario.exameFisico || 'Sem alterações dignas de nota ao exame clínico.'}
-
-4. RACIOCÍNIO CLÍNICO
-Hipótese: ${prontuario.hipoteseDiagnostica || 'Em investigação.'}
-
-5. CONDUTA E PLANO TEREAPÊUTICO
-${prontuario.conduta || 'Orientações gerais.'}
-
-6. PRESCRIÇÃO E EXAMES
-${prontuario.medicamentosEmUso ? `Uso Prévio: ${prontuario.medicamentosEmUso}` : ''}
-${prontuario.alergias ? `Alergias: ${prontuario.alergias}` : 'Nega alergias conhecidas.'}
-${prontuario.examesSolicitados ? `Solicitação de Exames: ${prontuario.examesSolicitados}` : ''}
-
-__________________________________________
-Assinatura e Carimbo
-    `;
-    setDocumentoFinal(textoFinal);
-    setLoadingDoc(false);
-  };
-
-  const handlePrint = () => { window.print(); };
-
-  if (!medicoId) return null;
-
-  // --- TELA 1: SELEÇÃO DE PACIENTE ---
-  if (!pacienteId) {
-      return (
-        <main className="min-h-screen bg-slate-50 flex flex-col items-center py-10 px-4">
-            <div className="w-full max-w-4xl">
-                <header className="flex justify-between items-center mb-8">
-                    <div>
-                        <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-2"><Activity className="text-blue-600"/> Medic AI</h1>
-                        <p className="text-slate-500">Bem-vindo(a), Doutor(a).</p>
+        {/* CONTEÚDO PRINCIPAL */}
+        <main className="flex-1 flex flex-col h-full relative z-10 pl-[120px] pr-8 py-8 overflow-y-auto custom-scrollbar">
+            
+            {/* HEADER */}
+            <header className="flex justify-between items-center mb-10 shrink-0">
+                <div>
+                    <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Meus Pacientes</h1>
+                    <p className="text-slate-400 text-sm mt-1">Gerencie seus atendimentos e prontuários</p>
+                </div>
+                <div className="flex items-center gap-6">
+                    <button 
+                        onClick={() => setIsModalOpen(true)}
+                        className="flex items-center gap-2 bg-[#00c985] hover:bg-[#00b074] text-white px-6 py-3 rounded-full font-bold shadow-lg shadow-emerald-200/50 transition-all transform hover:-translate-y-0.5"
+                    >
+                        <UserPlus size={20} /> Novo Paciente
+                    </button>
+                    <div className="flex items-center gap-3 pl-6 border-l border-slate-200">
+                    <div className="text-right hidden sm:block">
+                            <p className="text-sm font-bold text-slate-700">Olá, {medicoNome}</p>
+                            <p className="text-xs text-slate-400">Médico</p>
                     </div>
-                    <button onClick={logout} className="text-slate-400 hover:text-red-500"><LogOut /></button>
-                </header>
-
-                <div className="bg-white p-8 rounded-2xl shadow-xl">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold text-slate-700 flex items-center gap-2"><Users size={20}/> Meus Pacientes</h2>
-                        <button onClick={() => setIsCreatingPaciente(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold transition">
-                            <Plus size={16} /> Novo Paciente
-                        </button>
+                    <div className="w-10 h-10 rounded-full bg-[#00c985]/10 flex items-center justify-center text-[#00c985]">
+                            <User size={20} />
                     </div>
+                    </div>
+                </div>
+            </header>
 
-                    {isCreatingPaciente && (
-                        <form onSubmit={handleCriarPaciente} className="mb-8 p-4 bg-blue-50 rounded-xl border border-blue-100 animate-in fade-in slide-in-from-top-2">
-                            <h3 className="font-bold text-blue-800 mb-3 text-sm uppercase">Cadastro Rápido</h3>
-                            <div className="flex gap-4">
-                                <input placeholder="Nome Completo" className="flex-1 p-2 border rounded" value={novoNome} onChange={e => setNovoNome(e.target.value)} required />
-                                <input placeholder="CPF (Opcional)" className="w-40 p-2 border rounded" value={novoCpf} onChange={e => setNovoCpf(e.target.value)} />
-                                <button type="submit" className="bg-blue-600 text-white px-6 rounded font-bold hover:bg-blue-700">Salvar</button>
-                                <button type="button" onClick={() => setIsCreatingPaciente(false)} className="text-slate-500 px-4 hover:underline">Cancelar</button>
+            {/* ESTATÍSTICAS */}
+            <div className="grid grid-cols-4 gap-6 mb-8 shrink-0">
+                <StatCard title="Total de Pacientes" value={pacientes.length.toString()} icon={<Users className="text-blue-500"/>} bg="bg-blue-50" />
+                <StatCard title="Consultas Hoje" value="0" icon={<Calendar className="text-[#00c985]"/>} bg="bg-emerald-50" />
+                <StatCard title="Em Espera" value="0" icon={<Clock className="text-amber-500"/>} bg="bg-amber-50" />
+                <StatCard title="Laudos Gerados" value="0" icon={<FileText className="text-purple-500"/>} bg="bg-purple-50" />
+            </div>
+
+            {/* BARRA DE BUSCA */}
+            <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 mb-6 flex items-center justify-between shrink-0">
+                <div className="relative flex-1 max-w-lg ml-2">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
+                    <input 
+                        type="text" 
+                        placeholder="Buscar por nome, CPF ou prontuário..." 
+                        className="w-full bg-transparent border-none py-4 pl-12 pr-6 text-sm focus:outline-none placeholder:text-slate-400 text-slate-700"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <div className="flex gap-3 mr-2">
+                    <select className="bg-slate-50 border border-slate-200 text-slate-600 text-sm rounded-xl px-4 py-2.5 focus:outline-none hover:border-slate-300 cursor-pointer">
+                        <option>Todos os Status</option>
+                        <option>Ativos</option>
+                        <option>Inativos</option>
+                    </select>
+                </div>
+            </div>
+
+            {/* LISTA DE PACIENTES */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex-1 flex flex-col min-h-[400px]">
+                {isLoadingList ? (
+                    <div className="flex-1 flex items-center justify-center text-slate-400 gap-2">
+                        <Loader2 className="animate-spin" /> Carregando pacientes...
+                    </div>
+                ) : (
+                    <div className="overflow-auto custom-scrollbar">
+                        <table className="w-full text-left border-collapse">
+                            <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
+                                <tr>
+                                    <th className="px-8 py-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Paciente</th>
+                                    <th className="px-6 py-5 text-xs font-bold text-slate-400 uppercase tracking-wider">CPF/Contato</th>
+                                    <th className="px-6 py-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Última Consulta</th>
+                                    <th className="px-6 py-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                                    <th className="px-6 py-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {filteredPacientes.map((paciente) => (
+                                    <tr key={paciente.id} className="group hover:bg-slate-50/50 transition-colors">
+                                        <td className="px-8 py-5">
+                                            <div className="flex items-center gap-4">
+                                                {/* Avatar de Iniciais */}
+                                                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-sm shrink-0 uppercase">
+                                                    {paciente.nome ? paciente.nome.substring(0,2) : "PA"}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-slate-700 text-sm group-hover:text-[#00c985] transition-colors">{paciente.nome}</p>
+                                                    <p className="text-xs text-slate-400">ID: #{String(paciente.id).padStart(4, '0')}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-5">
+                                            <p className="text-sm text-slate-600 font-mono">{paciente.cpf}</p>
+                                            <p className="text-xs text-slate-400">{paciente.email || paciente.telefone || "Sem contato"}</p>
+                                        </td>
+                                        <td className="px-6 py-5 text-sm text-slate-500 flex items-center gap-2">
+                                            <Calendar size={14} className="text-slate-300"/>
+                                            {paciente.ultimaConsulta}
+                                        </td>
+                                        <td className="px-6 py-5">
+                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${paciente.status === 'Ativo' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${paciente.status === 'Ativo' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+                                                {paciente.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-5 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                {/* BOTÃO EDITAR */}
+                                                <button className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition" title="Editar Paciente">
+                                                    <Edit3 size={16} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleIniciarConsulta(paciente.id)}
+                                                    disabled={isStartingConsulta === paciente.id}
+                                                    className="inline-flex items-center gap-2 bg-white border border-slate-200 hover:border-[#00c985] hover:text-[#00c985] text-slate-600 px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm hover:shadow-md"
+                                                >
+                                                    {isStartingConsulta === paciente.id ? <Loader2 size={14} className="animate-spin"/> : <>Iniciar Consulta <ArrowRight size={14}/></>}
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleAbrirHistorico(paciente)}
+                                                    className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition" 
+                                                    title="Ver Histórico"
+                                                >
+                                                    <History size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        
+                        {filteredPacientes.length === 0 && (
+                            <div className="p-12 text-center text-slate-400">
+                                <Users size={48} className="mx-auto mb-3 opacity-20"/>
+                                <p>Nenhum paciente encontrado.</p>
                             </div>
-                        </form>
-                    )}
-
-                    <div className="space-y-2">
-                        {pacientes.length === 0 ? (
-                            <p className="text-center text-slate-400 py-10">Nenhum paciente encontrado. Cadastre o primeiro acima.</p>
-                        ) : (
-                            pacientes.map(p => (
-                                <div key={p.id} onClick={() => selecionarPaciente(p)} 
-                                    className="p-4 border border-slate-100 rounded-xl hover:bg-slate-50 hover:border-blue-200 cursor-pointer transition flex justify-between items-center group">
-                                    <div className="flex items-center gap-4">
-                                        <div className="bg-slate-200 p-3 rounded-full text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition"><User size={20}/></div>
-                                        <div>
-                                            <p className="font-bold text-slate-700">{p.nome}</p>
-                                            <p className="text-xs text-slate-400">CPF: {p.cpf || 'Não informado'}</p>
-                                        </div>
-                                    </div>
-                                    <ChevronRight className="text-slate-300 group-hover:text-blue-500" />
-                                </div>
-                            ))
                         )}
                     </div>
-                </div>
+                )}
             </div>
+
         </main>
-      )
-  }
 
-  // --- TELA 2: A CONSULTA (GRAVADOR) ---
-  return (
-    <main className="min-h-screen bg-slate-50 flex flex-col items-center py-10 px-4">
-      <div className="w-full max-w-6xl bg-white shadow-xl rounded-2xl overflow-hidden mb-10 print:shadow-none print:w-full print:max-w-none">
-        
-        {/* Cabeçalho */}
-        <header className="bg-blue-700 p-6 text-white flex justify-between items-center print:hidden">
-          <div className="flex items-center gap-3">
-              <button onClick={trocarPaciente} className="bg-blue-800 p-2 rounded-lg hover:bg-blue-900 transition mr-2" title="Voltar para lista">
-                  <Users size={18} />
-              </button>
-              <div>
-                  <h1 className="text-lg font-bold flex items-center gap-2">Atendendo: {pacienteSelecionadoNome}</h1>
-                  <span className="text-xs opacity-70">Protocolo: {consultaId || 'Nova Consulta'}</span>
-              </div>
-          </div>
-          <div className="flex items-center gap-4">
-             <button onClick={logout} className="text-white/80 hover:text-white" title="Sair">
-                <LogOut size={20} />
-             </button>
-          </div>
-        </header>
+        {/* --- MODAL DE NOVO PACIENTE --- */}
+        {isModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100 scale-100 animate-in zoom-in-95 duration-200">
+                    <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <h3 className="font-bold text-lg text-slate-700">Cadastrar Novo Paciente</h3>
+                        <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition">
+                            <X size={20} />
+                        </button>
+                    </div>
+                    
+                    <form onSubmit={handleSalvarPaciente} className="p-6 space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nome Completo *</label>
+                            <input required type="text" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-slate-700 focus:outline-none focus:border-[#00c985]"
+                                value={novoPaciente.nome} onChange={e => setNovoPaciente({...novoPaciente, nome: e.target.value})} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">CPF *</label>
+                                <input required type="text" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-slate-700 focus:outline-none focus:border-[#00c985]"
+                                    value={novoPaciente.cpf} onChange={e => setNovoPaciente({...novoPaciente, cpf: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Telefone</label>
+                                <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-slate-700 focus:outline-none focus:border-[#00c985]"
+                                    value={novoPaciente.telefone} onChange={e => setNovoPaciente({...novoPaciente, telefone: e.target.value})} />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">E-mail</label>
+                            <input type="email" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-slate-700 focus:outline-none focus:border-[#00c985]"
+                                value={novoPaciente.email} onChange={e => setNovoPaciente({...novoPaciente, email: e.target.value})} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Sexo</label>
+                                <select className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-slate-700 focus:outline-none focus:border-[#00c985]"
+                                    value={novoPaciente.sexo} onChange={e => setNovoPaciente({...novoPaciente, sexo: e.target.value})}>
+                                    <option value="Masculino">Masculino</option>
+                                    <option value="Feminino">Feminino</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Data Nascimento</label>
+                                <input type="date" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-slate-700 focus:outline-none focus:border-[#00c985]"
+                                    value={novoPaciente.dataNascimento} onChange={e => setNovoPaciente({...novoPaciente, dataNascimento: e.target.value})} />
+                            </div>
+                        </div>
 
-        <div className="p-8 print:p-0">
-          {!prontuario && (
-            <div className="flex flex-col items-center py-12 gap-6">
-              <button onClick={isRecording ? stopRecording : startRecording} 
-                className={`p-8 rounded-full transition-all shadow-2xl ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                {isProcessing ? <Loader2 className="h-12 w-12 text-white animate-spin" /> : 
-                 isRecording ? <Square className="h-12 w-12 text-white fill-current" /> : <Mic className="h-12 w-12 text-white" />}
-              </button>
-              <p className="text-lg text-slate-600 font-medium">
-                {isProcessing ? "Ouvindo, Transcrevendo e Analisando Clinicamente..." : isRecording ? "Gravando..." : "Clique para iniciar"}
-              </p>
-            </div>
-          )}
-
-          {prontuario && (
-            <form onSubmit={handleSubmit} className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-              
-              <div className="mb-6 p-4 bg-slate-100 rounded-lg border border-slate-200 print:hidden">
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase mb-2"><FileText size={14}/> Transcrição Original</label>
-                <p className="text-slate-700 italic text-sm leading-relaxed">&quot;{prontuario.transcricao}&quot;</p>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:hidden">
-                {/* --- CAMPOS DO FORMULÁRIO (Igual ao anterior) --- */}
-                <div className="space-y-6">
-                   <h3 className="text-lg font-bold text-blue-800 border-b pb-2 flex items-center gap-2"><User size={20}/> Anamnese</h3>
-                   <div><label className="label-form">Queixa Principal</label><input type="text" className="input-form" value={prontuario.queixaPrincipal || ''} onChange={e => handleInputChange('queixaPrincipal', e.target.value)} /></div>
-                   <div><label className="label-form">HDA</label><textarea rows={4} className="input-form" value={prontuario.hda || ''} onChange={e => handleInputChange('hda', e.target.value)} /></div>
-                   <div className="grid grid-cols-2 gap-4">
-                      <div><label className="label-form">Antecedentes</label><textarea rows={3} className="input-form text-sm" value={prontuario.antecedentesPessoais || ''} onChange={e => handleInputChange('antecedentesPessoais', e.target.value)} /></div>
-                      <div><label className="label-form">Hábitos</label><textarea rows={3} className="input-form text-sm" value={prontuario.habitos || ''} onChange={e => handleInputChange('habitos', e.target.value)} /></div>
-                   </div>
-                   <h3 className="text-lg font-bold text-blue-800 border-b pb-2 flex items-center gap-2 pt-4"><ClipboardList size={20}/> Exame Físico</h3>
-                   <textarea rows={3} className="input-form" value={prontuario.exameFisico || ''} onChange={e => handleInputChange('exameFisico', e.target.value)} />
+                        <div className="pt-4 flex gap-3">
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-white border border-slate-200 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-50 transition">Cancelar</button>
+                            <button type="submit" disabled={isSaving} className="flex-1 bg-[#00c985] hover:bg-[#00b074] text-white py-3 rounded-xl font-bold shadow-md hover:shadow-lg transition flex justify-center items-center gap-2">
+                                {isSaving ? <Loader2 className="animate-spin" /> : <><Save size={18}/> Salvar Paciente</>}
+                            </button>
+                        </div>
+                    </form>
                 </div>
-
-                <div className="space-y-6">
-                    <div className="bg-purple-50 p-5 rounded-xl border border-purple-200 shadow-sm relative overflow-hidden">
-                        <div className="absolute top-0 right-0 bg-purple-200 text-purple-800 text-xs px-2 py-1 rounded-bl font-bold">Sugestões IA</div>
-                        <h3 className="text-lg font-bold text-purple-900 mb-4 flex items-center gap-2"><TestTube2 size={20}/> Raciocínio Clínico</h3>
-                        <div className="space-y-4">
-                            <div><label className="label-form text-purple-900">Hipótese Diagnóstica</label><textarea rows={2} className="input-form border-purple-300 focus:ring-purple-500 bg-white" placeholder="A IA sugerirá diagnósticos aqui..." value={prontuario.hipoteseDiagnostica || ''} onChange={e => handleInputChange('hipoteseDiagnostica', e.target.value)} /></div>
-                            <div><label className="label-form text-purple-900">Exames Complementares</label><textarea rows={3} className="input-form border-purple-300 focus:ring-purple-500 bg-white" placeholder="A IA sugerirá exames aqui..." value={prontuario.examesSolicitados || ''} onChange={e => handleInputChange('examesSolicitados', e.target.value)} /></div>
+            </div>
+        )}
+        {/* --- MODAL DE HISTÓRICO --- */}
+            {isHistoricoModalOpen && pacienteSelecionado && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100 scale-100 animate-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                            <div>
+                                <h3 className="font-bold text-lg text-slate-700">Histórico de Consultas</h3>
+                                <p className="text-sm text-slate-500">{pacienteSelecionado.nome}</p>
+                            </div>
+                            <button onClick={() => setIsHistoricoModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        
+                        <div className="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                            {isLoadingHistorico ? (
+                                <div className="flex justify-center items-center py-10 text-slate-400 gap-2">
+                                    <Loader2 className="animate-spin" /> Carregando histórico...
+                                </div>
+                            ) : historicoConsultas.length === 0 ? (
+                                <div className="text-center py-10 text-slate-400">
+                                    <FileText size={40} className="mx-auto mb-3 opacity-20" />
+                                    <p>Nenhuma consulta registrada para este paciente.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {historicoConsultas.map((consulta) => (
+                                        <div key={consulta.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition">
+                                            <div className="flex flex-col">
+                                                {/* Ajuste a exibição da data conforme o retorno do seu DTO */}
+                                                <span className="font-bold text-slate-700">Consulta #{consulta.id}</span>
+                                                <span className="text-xs text-slate-400">Status: {consulta.status}</span>
+                                            </div>
+                                            <button
+                                                onClick={() => router.push(`/consulta/${consulta.id}`)}
+                                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                                                    consulta.status === 'CRIADA' 
+                                                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' 
+                                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
+                                                }`}
+                                            >
+                                                {consulta.status === 'CRIADA' ? 'Continuar Consulta' : 'Ver Prontuário'}
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
-                    <div className="bg-green-50 p-5 rounded-xl border border-green-200 shadow-sm">
-                        <h3 className="text-lg font-bold text-green-900 mb-2">Conduta & Prescrição</h3>
-                        <textarea rows={5} className="w-full p-3 border border-green-300 rounded-lg focus:ring-2 text-slate-900 bg-white focus:ring-green-500 outline-none font-medium text-lg" value={prontuario.conduta || ''} onChange={e => handleInputChange('conduta', e.target.value)} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div><label className="label-form">Medicamentos (Uso)</label><textarea rows={2} className="input-form" value={prontuario.medicamentosEmUso || ''} onChange={e => handleInputChange('medicamentosEmUso', e.target.value)} /></div>
-                        <div><label className="label-form text-red-600">Alergias</label><textarea rows={2} className="input-form bg-red-50 border-red-200" value={prontuario.alergias || ''} onChange={e => handleInputChange('alergias', e.target.value)} /></div>
-                    </div>
                 </div>
-              </div>
+            )}
 
-              {/* --- ÁREA DE IMPRESSÃO --- */}
-              <div className="mt-12 pt-8 border-t-4 border-slate-200 print:border-none print:mt-0 print:pt-0">
-                  <div className="flex justify-between items-center mb-6 print:hidden">
-                      <div className="flex items-center gap-3">
-                          <div className="p-3 bg-slate-800 rounded-lg text-white"><Printer size={24} /></div>
-                          <div><h3 className="text-xl font-bold text-slate-800">Área de Impressão</h3><p className="text-sm text-slate-500">O documento é atualizado conforme você edita os campos acima.</p></div>
-                      </div>
-                      <div className="flex gap-3">
-                        <button type="button" onClick={gerarLaudoSincronizado} disabled={loadingDoc} className="px-6 py-3 bg-slate-700 text-white rounded-lg font-bold hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2">
-                            {loadingDoc ? <Loader2 className="animate-spin" /> : <FileText size={18} />} {loadingDoc ? "Gerando..." : "Atualizar Laudo"}
-                        </button>
-                        <button type="button" onClick={handlePrint} disabled={!documentoFinal} className="px-8 py-3 bg-blue-700 text-white rounded-lg font-bold hover:bg-blue-800 transition shadow-lg hover:shadow-xl flex items-center gap-2 disabled:opacity-50">
-                            <Printer size={18} /> Imprimir / PDF
-                        </button>
-                      </div>
-                  </div>
-                  <div className="bg-slate-200 p-8 rounded-xl flex justify-center overflow-auto border-inner print:p-0 print:bg-white print:overflow-visible">
-                      {documentoFinal ? (
-                          <div contentEditable suppressContentEditableWarning={true} className="folha-a4 bg-white text-black font-serif text-sm leading-relaxed shadow-2xl outline-none print:shadow-none print:w-full print:max-w-none" onBlur={(e) => setDocumentoFinal(e.currentTarget.innerText)}>
-                             {documentoFinal.split('\n').map((line, i) => (<p key={i} className="min-h-[1em]">{line}</p>))}
-                          </div>
-                      ) : (
-                          <div className="folha-a4 bg-white shadow-xl flex flex-col items-center justify-center text-slate-300 border border-slate-200 print:hidden">
-                              <Printer size={48} className="mb-4 opacity-20" />
-                              <p className="font-medium italic">O documento gerado aparecerá aqui</p>
-                              <p className="text-xs mt-2">Clique em "Atualizar Laudo" acima</p>
-                          </div>
-                      )}
-                  </div>
-              </div>
-            </form>
-          )}
+        <style jsx global>{`
+            .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+            .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+            .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+            .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        `}</style>
         </div>
-      </div>
-      <style jsx global>{`
-        @media print { body * { visibility: hidden; } .folha-a4, .folha-a4 * { visibility: visible; } .folha-a4 { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 20mm !important; box-shadow: none !important; border: none !important; } @page { size: auto; margin: 0mm; } }
-        .folha-a4 { width: 210mm; min-height: 297mm; padding: 20mm; white-space: pre-wrap; }
-        .label-form { display: block; font-size: 0.875rem; font-weight: 600; color: #334155; margin-bottom: 0.25rem; }
-        .input-form { width: 100%; padding: 0.6rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; outline: none; transition: all; color: #0f172a; background-color: #ffffff; font-size: 1rem; }
-        .input-form:focus { ring: 2px; --tw-ring-color: #3b82f6; border-color: #3b82f6; }
-      `}</style>
-    </main>
-  );
-}
+    );
+    }
+
+    // --- SUB-COMPONENTES ---
+    const NavItem = ({ icon, active, hasDot }: NavItemProps) => (
+    <button className={`p-3 rounded-full transition-all duration-300 flex justify-center items-center relative w-[52px] h-[52px] 
+        ${active ? 'text-[#3ed28c] bg-white shadow-md scale-105' : 'text-white hover:bg-white/20'}`}>
+        <div className="relative z-10 flex items-center justify-center">
+        {icon}
+        {hasDot && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-[#42f5ce] border-2 border-[#3ed28c] rounded-full"></span>}
+        </div>
+    </button>
+    );
+
+    const StatCard = ({ title, value, icon, bg }: StatCardProps) => (
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 hover:shadow-md transition-shadow">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${bg}`}>{icon}</div>
+            <div><p className="text-slate-400 text-xs font-bold uppercase tracking-wider">{title}</p><p className="text-2xl font-bold text-slate-700">{value}</p></div>
+        </div>
+    );

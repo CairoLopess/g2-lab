@@ -29,6 +29,11 @@ public class MedicoController {
     @PostMapping
     @Transactional
     public ResponseEntity cadastrar(@RequestBody @Valid DadosCadastroMedicoDto dados, UriComponentsBuilder uriBuilder) {
+    	
+    	if (repository.findByEmail(dados.email()) != null) {
+            return ResponseEntity.badRequest().body("Este email já está cadastrado.");
+        }
+    	
         var medico = new Medico();
         medico.setNome(dados.nome());
         medico.setEmail(dados.email());

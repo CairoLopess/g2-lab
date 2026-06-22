@@ -15,13 +15,9 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
 
-@Data
 @Entity
 @Table(name = "medicos")
-@EqualsAndHashCode(of = "id")
 public class Medico implements UserDetails {
 	
     @Id
@@ -118,6 +114,11 @@ public class Medico implements UserDetails {
 	public String getEspecialidade() {
 		return especialidade;
 	}
+	
+	public void setId(UUID id) {
+		this.id = id;
+	}
+
 	public void setEspecialidade(String especialidade) {
 		this.especialidade = especialidade;
 	}

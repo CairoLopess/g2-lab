@@ -2,9 +2,6 @@ package br.com.medic.entity;
 
 import java.time.LocalDateTime;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import br.com.medic.enums.StatusConsulta;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -17,9 +14,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import lombok.Data;
 
-@Data
 @Entity
 @Table(name = "consultas")
 public class Consulta {
@@ -46,244 +41,113 @@ public class Consulta {
     @Column(columnDefinition = "TEXT")
     private String transcricaoBruta; 
 
-    // --- BLOCO 1: NARRATIVA CLÍNICA ---
     @Column(columnDefinition = "TEXT")
-    private String queixaPrincipal; // "Dor de cabeça"
+    private String iaDadosEstruturados;
 
     @Column(columnDefinition = "TEXT")
-    private String hda; // História detalhada e narrativa
-
-    // --- BLOCO 2: SEGURANÇA E CONTEXTO (Novos Campos) ---
-    @Column(columnDefinition = "TEXT")
-    private String alergias; // Ex: "Dipirona, Camarão" (CRÍTICO)
-
-    @Column(columnDefinition = "TEXT")
-    private String medicamentosEmUso; // Ex: "Losartana 50mg"
-
-    @Column(columnDefinition = "TEXT")
-    private String antecedentesPessoais; // Ex: "Hipertensão, Diabetes"
-
-    @Column(columnDefinition = "TEXT")
-    private String historicoFamiliar; // Ex: "Pai faleceu de IAM"
-
-    @Column(columnDefinition = "TEXT")
-    private String habitos; // Ex: "Tabagista, sedentário"
-
-    // --- BLOCO 3: EXAME E DESFECHO ---
-    @Column(columnDefinition = "TEXT")
-    private String exameFisico;
-
-    @Column(columnDefinition = "TEXT")
-    private String hipoteseDiagnostica;
-
-    @Column(columnDefinition = "TEXT")
-    private String conduta;
-    
-    @Column(columnDefinition = "TEXT")
-    private String examesSolicitados; // <-- NOVO CAMPO
-    
-    @Column(nullable = false)
-    private Integer tentativasLaudo = 0; // Começa com 0
-    
-    @Column(columnDefinition = "TEXT") // TEXT permite textos longos
     private String anamneseFormatada;
 
-    // --- BACKUP ---
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
-    private String iaDadosEstruturados;
+    @Column(nullable = false)
+    private Boolean prontuarioGerado = false;
+
+    @Column(name = "duracao_audio_seg")
+    private Integer duracaoAudioSegundos = 0; 
+
+    // --- CONSTRUTORES ---
+    public Consulta() {}
     
-    
-    public Consulta(){};
-    
-	public Consulta(Paciente paciente, Medico medico, LocalDateTime dataConsulta, StatusConsulta status,
-			String audioPath, String transcricaoBruta, String queixaPrincipal, String hda, String alergias,
-			String medicamentosEmUso, String antecedentesPessoais, String historicoFamiliar, String habitos,
-			String exameFisico, String hipoteseDiagnostica, String conduta, String iaDadosEstruturados) {
-		super();
-		this.paciente = paciente;
-		this.medico = medico;
-		this.dataConsulta = dataConsulta;
-		this.status = status;
-		this.audioPath = audioPath;
-		this.transcricaoBruta = transcricaoBruta;
-		this.queixaPrincipal = queixaPrincipal;
-		this.hda = hda;
-		this.alergias = alergias;
-		this.medicamentosEmUso = medicamentosEmUso;
-		this.antecedentesPessoais = antecedentesPessoais;
-		this.historicoFamiliar = historicoFamiliar;
-		this.habitos = habitos;
-		this.exameFisico = exameFisico;
-		this.hipoteseDiagnostica = hipoteseDiagnostica;
-		this.conduta = conduta;
-		this.iaDadosEstruturados = iaDadosEstruturados;
-	}
-	
-	public Integer getTentativasLaudo() {
-        return tentativasLaudo;
+    public Consulta(Paciente paciente, Medico medico) {
+        this.paciente = paciente;
+        this.medico = medico;
+        this.dataConsulta = LocalDateTime.now();
+        this.status = StatusConsulta.CRIADA;
     }
 
-    public void setTentativasLaudo(Integer tentativasLaudo) {
-        this.tentativasLaudo = tentativasLaudo;
+    // ==========================================
+    // GETTERS E SETTERS 
+    // ==========================================
+
+    public Long getId() {
+        return id;
     }
 
-	public String getAnamneseFormatada() {
-		return anamneseFormatada;
-	}
+    public Paciente getPaciente() {
+        return paciente;
+    }
 
-	public void setAnamneseFormatada(String anamneseFormatada) {
-		this.anamneseFormatada = anamneseFormatada;
-	}
+    public void setPaciente(Paciente paciente) {
+        this.paciente = paciente;
+    }
 
-	public Long getId() {
-		return id;
-	}
+    public Medico getMedico() {
+        return medico;
+    }
 
+    public void setMedico(Medico medico) {
+        this.medico = medico;
+    }
 
-	public String getExamesSolicitados() {
-		return examesSolicitados;
-	}
+    public LocalDateTime getDataConsulta() {
+        return dataConsulta;
+    }
 
-	public void setExamesSolicitados(String examesSolicitados) {
-		this.examesSolicitados = examesSolicitados;
-	}
+    public void setDataConsulta(LocalDateTime dataConsulta) {
+        this.dataConsulta = dataConsulta;
+    }
 
-	public Paciente getPaciente() {
-		return paciente;
-	}
+    public StatusConsulta getStatus() {
+        return status;
+    }
 
-	public void setPaciente(Paciente paciente) {
-		this.paciente = paciente;
-	}
+    public void setStatus(StatusConsulta status) {
+        this.status = status;
+    }
 
-	public Medico getMedico() {
-		return medico;
-	}
+    public String getAudioPath() {
+        return audioPath;
+    }
 
-	public void setMedico(Medico medico) {
-		this.medico = medico;
-	}
+    public void setAudioPath(String audioPath) {
+        this.audioPath = audioPath;
+    }
 
-	public LocalDateTime getDataConsulta() {
-		return dataConsulta;
-	}
+    public String getTranscricaoBruta() {
+        return transcricaoBruta;
+    }
 
-	public void setDataConsulta(LocalDateTime dataConsulta) {
-		this.dataConsulta = dataConsulta;
-	}
+    public void setTranscricaoBruta(String transcricaoBruta) {
+        this.transcricaoBruta = transcricaoBruta;
+    }
 
-	public StatusConsulta getStatus() {
-		return status;
-	}
+    public String getIaDadosEstruturados() {
+        return iaDadosEstruturados;
+    }
 
-	public void setStatus(StatusConsulta status) {
-		this.status = status;
-	}
+    public void setIaDadosEstruturados(String iaDadosEstruturados) {
+        this.iaDadosEstruturados = iaDadosEstruturados;
+    }
 
-	public String getAudioPath() {
-		return audioPath;
-	}
+    public String getAnamneseFormatada() {
+        return anamneseFormatada;
+    }
 
-	public void setAudioPath(String audioPath) {
-		this.audioPath = audioPath;
-	}
+    public void setAnamneseFormatada(String anamneseFormatada) {
+        this.anamneseFormatada = anamneseFormatada;
+    }
 
-	public String getTranscricaoBruta() {
-		return transcricaoBruta;
-	}
+    public Boolean getProntuarioGerado() {
+        return prontuarioGerado;
+    }
 
-	public void setTranscricaoBruta(String transcricaoBruta) {
-		this.transcricaoBruta = transcricaoBruta;
-	}
+    public void setProntuarioGerado(Boolean prontuarioGerado) {
+        this.prontuarioGerado = prontuarioGerado;
+    }
 
-	public String getQueixaPrincipal() {
-		return queixaPrincipal;
-	}
+    public Integer getDuracaoAudioSegundos() {
+        return duracaoAudioSegundos;
+    }
 
-	public void setQueixaPrincipal(String queixaPrincipal) {
-		this.queixaPrincipal = queixaPrincipal;
-	}
-
-	public String getHda() {
-		return hda;
-	}
-
-	public void setHda(String hda) {
-		this.hda = hda;
-	}
-
-	public String getAlergias() {
-		return alergias;
-	}
-
-	public void setAlergias(String alergias) {
-		this.alergias = alergias;
-	}
-
-	public String getMedicamentosEmUso() {
-		return medicamentosEmUso;
-	}
-
-	public void setMedicamentosEmUso(String medicamentosEmUso) {
-		this.medicamentosEmUso = medicamentosEmUso;
-	}
-
-	public String getAntecedentesPessoais() {
-		return antecedentesPessoais;
-	}
-
-	public void setAntecedentesPessoais(String antecedentesPessoais) {
-		this.antecedentesPessoais = antecedentesPessoais;
-	}
-
-	public String getHistoricoFamiliar() {
-		return historicoFamiliar;
-	}
-
-	public void setHistoricoFamiliar(String historicoFamiliar) {
-		this.historicoFamiliar = historicoFamiliar;
-	}
-
-	public String getHabitos() {
-		return habitos;
-	}
-
-	public void setHabitos(String habitos) {
-		this.habitos = habitos;
-	}
-
-	public String getExameFisico() {
-		return exameFisico;
-	}
-
-	public void setExameFisico(String exameFisico) {
-		this.exameFisico = exameFisico;
-	}
-
-	public String getHipoteseDiagnostica() {
-		return hipoteseDiagnostica;
-	}
-
-	public void setHipoteseDiagnostica(String hipoteseDiagnostica) {
-		this.hipoteseDiagnostica = hipoteseDiagnostica;
-	}
-
-	public String getConduta() {
-		return conduta;
-	}
-
-	public void setConduta(String conduta) {
-		this.conduta = conduta;
-	}
-
-	public String getIaDadosEstruturados() {
-		return iaDadosEstruturados;
-	}
-
-	public void setIaDadosEstruturados(String iaDadosEstruturados) {
-		this.iaDadosEstruturados = iaDadosEstruturados;
-	} 
-    
-    
+    public void setDuracaoAudioSegundos(Integer duracaoAudioSegundos) {
+        this.duracaoAudioSegundos = duracaoAudioSegundos;
+    }
 }

@@ -1,7 +1,8 @@
 package br.com.medic.service.ai;
 
-import br.com.medic.dto.ProntuarioEdicaoDto;
+import br.com.medic.dto.CopilotoResponseDto;
 import br.com.medic.dto.ProntuarioGeradoDto;
+import dev.langchain4j.service.Result;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.V;
@@ -9,40 +10,42 @@ import dev.langchain4j.service.V;
 
 public interface MedicoAssistenteAi {
 
-    @SystemMessage("""
-        Você é um médico residente sênior e auditor. 
-        Sua tarefa é ouvir o ditado/consulta e estruturar o prontuário para o médico titular revisar.
+	@SystemMessage("""
+	        Você é um copiloto médico em tempo real. Analise a transcrição parcial de uma consulta médica em andamento.
 
-        CONTEXTO:
-        - O médico pode ter ditado apenas os sintomas e espera que você sugira a conduta.
-        - Você tem acesso a todo o seu conhecimento de diretrizes médicas (SBC, AMB, SBP, ADA, GINA, GOLD, etc).
+	        Sua tarefa é retornar um JSON com EXATAMENTE esta estrutura:
 
-        DIRETRIZES DE PREENCHIMENTO DOS CAMPOS:
+	        1. **perguntasSugeridas**: Liste 2-4 perguntas que o médico deveria fazer ao paciente para complementar a anamnese.
+	           Foque em perguntas que ainda NÃO foram respondidas na transcrição.
+	        2. **hipotesesDiagnosticas**: Liste 1-3 hipóteses diagnósticas baseadas nos dados disponíveis até agora.
+	           Inclua o grau de probabilidade (ex: "Pneumonia bacteriana (provável)").
+	        3. **dadosExtraidos**: Extraia dados estruturados da transcrição nos campos:
+	           - queixaPrincipal: lista de queixas principais mencionadas
+	           - hda: lista de pontos da história da doença atual
+	           - sintomasAssociados: lista de sintomas mencionados
+	           - antecedentesPessoais: lista de antecedentes pessoais mencionados
+	           - antecedentesFamiliares: lista de antecedentes familiares mencionados
+	           - medicamentosEmUso: lista de medicamentos citados
+	           - alergias: lista de alergias mencionadas
 
-        1. **Campos Factuais (Queixa, HDA, Medicamentos, Alergias, Exame Físico):**
-           - Preencha estritamente com o que foi falado no áudio.
-           - Use linguagem técnica culta (Ex: "Dor de barriga" -> "Dor abdominal").
+	        Se um campo não foi mencionado na transcrição, retorne lista vazia [].
+	        Seja conciso e direto. Responda APENAS com o JSON estruturado.
+	    """)
+	Result<CopilotoResponseDto> analisarCopilotoTempoReal(@UserMessage String transcricaoParcial);
 
-        2. **RACIOCÍNIO CLÍNICO E SUGESTÕES (AQUI É O SEU DIFERENCIAL):**
-           
-           - **hipoteseDiagnostica:**
-             * Se o médico falou o diagnóstico, use o dele.
-             * SE NÃO FALOU: Analise a HDA e sugira as hipóteses mais prováveis.
-             * OBRIGATÓRIO: Cite o critério ou fonte se aplicável (Ex: "Sugestão: Síndrome do Intestino Irritável (Critérios de Roma IV)").
-
-           - **examesSolicitados:**
-             * Liste os exames citados.
-             * SE FALTAR: Sugira exames complementares para confirmar a hipótese acima.
-
-           - **conduta:**
-             * Liste o que o médico prescreveu explicitamente.
-             * SE A CONDUTA ESTIVER VAGA OU AUSENTE: Complete com uma **"Sugestão de Conduta"** baseada em diretrizes.
-             * FORMATO DA SUGESTÃO: Coloque entre parênteses ou em uma nova linha indicando a fonte.
-             * Exemplo: "Prescrito: Hidratação. (Sugestão Adicional: Iniciar Oseltamivir conforme protocolo do MS para Influenza Srag)".
-
-        Se uma informação não for citada e não couber sugestão clínica, retorne null.
-    """)
-    ProntuarioGeradoDto analisarConsulta(@UserMessage String transcricaoBruta);
+	@SystemMessage("""
+	        Você é um médico auditor. Ouça a transcrição e gere um PRONTUÁRIO COMPLETO.
+	        
+	        DIRETRIZES DE PREENCHIMENTO:
+	        1. **resumoProntuario**: Um parágrafo curto (3 linhas) sintetizando o caso para leitura rápida.
+	        2. **revisaoSistemas**: Liste apenas sintomas positivos (que o paciente sente) por sistema (Cardio, Resp, Digest, etc).
+	        3. **impressaoDiagnostica**: Liste as hipóteses com base técnica.
+	        4. **conduta**: Liste medicamentos prescritos e orientações.
+	        
+	        Se uma informação não foi citada, retorne "Não relatado".
+	        Mantenha tom formal e técnico.
+	    """)
+	    Result<ProntuarioGeradoDto> analisarConsulta(@UserMessage String transcricaoBruta);
 	
 	@SystemMessage("""
 	        Você é um médico consultor sênior. Baseado nos dados estruturados do paciente:
@@ -53,54 +56,70 @@ public interface MedicoAssistenteAi {
 	        Use formato Markdown (listas com bullet points) para fácil leitura.
 	        Seja direto e técnico.
 	    """)
-	    String gerarSugestoesClinicas(@UserMessage String jsonDadosAtuais);
-	
-    @SystemMessage("""
-        Você é um assistente administrativo médico experiente.
-        Sua tarefa é gerar um LAUDO MÉDICO FORMAL baseado nos dados estruturados, pronto para impressão e assinatura.
-        
-        INSTRUÇÕES DE FORMATAÇÃO:
-        1. Use linguagem culta, impessoal e técnica.
-        2. NÃO use Markdown (negrito, itálico), pois isso pode quebrar a formatação da impressora. Use apenas texto puro e quebras de linha.
-        3. Se algum campo estiver vazio ou null, escreva "Não digno de nota" ou "Nada consta", não deixe em branco.
-        
-        ESTRUTURA DO DOCUMENTO:
-        
-        ------------------------------------------------------------
-        CLÍNICA MÉDICA INTEGRADA
-        Atendimento Ambulatorial
-        ------------------------------------------------------------
-        
-        PACIENTE: {{paciente}}
-        MÉDICO RESPONSÁVEL: {{medico}}
-        DATA DO ATENDIMENTO: {{data}}
-        
-        1. ANAMNESE E HISTÓRIA CLÍNICA
-        [Aqui você funde a Queixa Principal e a HDA em um texto narrativo coerente. Inclua Antecedentes e Hábitos se houver relevância.]
-        
-        2. MEDICAMENTOS E ALERGIAS
-        Uso contínuo: [Lista ou 'Nega']
-        Alergias: [Lista ou 'Nega']
-        
-        3. EXAME FÍSICO
-        [Descrição objetiva]
-        
-        4. HIPÓTESE DIAGNÓSTICA
-        [Texto]
-        
-        5. CONDUTA E PLANO TERAPÊUTICO
-        [Descrição detalhada da prescrição e orientações]
-        
-        ------------------------------------------------------------
-        
-        
-        __________________________________________
-        Assinatura do Médico: {{medico}}
-    """)
-    String gerarDocumentoFormal(
-        @V("paciente") String nomePaciente,
-        @V("medico") String nomeMedico,
-        @V("data") String data,
-        @UserMessage ProntuarioEdicaoDto dadosFinais
-    );
+	Result<String> gerarSugestoesClinicas(@UserMessage String jsonDadosAtuais);
+
+	@SystemMessage("""
+	        Você é um assistente de documentação médica.
+	        Sua tarefa é redigir o **corpo clínico** do prontuário com base nas entradas fornecidas pelo usuário.
+	        
+	        SAÍDA ESPERADA:
+	        Gere um texto formatado, profissional e pronto para edição (estilo documento Word), seguindo ESTRITAMENTE esta estrutura:
+	        
+	        Queixa Principal:
+	        [Texto aqui]
+	        
+	        Resumo do Prontuário:
+	        [Texto aqui]
+	        
+	        HDA (História da Doença Atual):
+	        [Texto narrativo cronológico aqui]
+	        
+	        Revisão de Sintomas:
+	        [Texto aqui]
+	        
+	        Antecedentes Pessoais:
+	        [Texto aqui]
+	        
+	        Antecedentes Familiares:
+	        [Texto aqui]
+	        
+	        Medicamentos em Uso:
+	        [Lista aqui]
+	        
+	        Alergias:
+	        [Lista ou 'Nega']
+	        
+	        Hábitos de Vida:
+	        [Texto aqui]
+	        
+	        Exame Físico:
+	        [Descrição objetiva aqui]
+	        
+	        Exames Complementares:
+	        [Texto aqui]
+	        
+	        Impressão Diagnóstica:
+	        [Texto aqui]
+	        
+	        Conduta:
+	        [Plano terapêutico detalhado aqui]
+	        
+	        REGRAS:
+	        - Não inclua cabeçalho de paciente (nome, idade), pois o sistema adicionará isso.
+	        - Use quebras de linha para separar bem as seções.
+	        - Se algo não foi citado, escreva "Não relatado".
+	    """)
+	    @UserMessage("""
+	        Por favor, gere o prontuário com base nestas informações:
+
+	        1. TRANSCRICAO (Conversa bruta):
+	        {{transcricao}}
+
+	        2. RESUMO PRELIMINAR (Tópicos capturados):
+	        {{resumo}}
+	    """)
+	    Result<String> redigirProntuarioTexto(
+	        @V("transcricao") String transcricao, 
+	        @V("resumo") String resumoPreliminar
+	    );
 }

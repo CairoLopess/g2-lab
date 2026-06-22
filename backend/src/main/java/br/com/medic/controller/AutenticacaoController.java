@@ -1,6 +1,5 @@
 package br.com.medic.controller;
 
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -27,14 +26,13 @@ public class AutenticacaoController {
     private TokenService tokenService;
 
     @PostMapping
-    public ResponseEntity efetuarLogin(@RequestBody @Valid DadosAutenticacao dados) {
+    public ResponseEntity<DadosTokenJWT> efetuarLogin(@RequestBody @Valid DadosAutenticacao dados) {
         var authenticationToken = new UsernamePasswordAuthenticationToken(dados.email(), dados.senha());
         var authentication = manager.authenticate(authenticationToken);
 
-        var tokenJWT = tokenService.gerarToken((Medico) authentication.getPrincipal());
+        var medico = (Medico) authentication.getPrincipal();
+        var tokenJWT = tokenService.gerarToken(medico);
 
-        return ResponseEntity.ok(new DadosTokenJWT(tokenJWT));
+        return ResponseEntity.ok(new DadosTokenJWT(tokenJWT, medico.getId().toString(), medico.getNome()));
     }
 }
-
-// Crie os DTOs DadosAutenticacao(email, senha) e DadosTokenJWT(token)

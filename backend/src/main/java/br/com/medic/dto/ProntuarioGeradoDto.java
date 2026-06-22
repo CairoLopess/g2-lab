@@ -2,18 +2,16 @@ package br.com.medic.dto;
 
 public record ProntuarioGeradoDto(
     String queixaPrincipal,
+    String resumoProntuario, // Novo
     String hda,
-
-    // Novos campos mapeados
-    String alergias,
-    String medicamentosEmUso,
+    String revisaoSistemas,  // Novo
     String antecedentesPessoais,
-    String historicoFamiliar,
-    String habitos,
-
+    String antecedentesFamiliares,
+    String medicamentosEmUso,
+    String alergias,
+    String habitosDeVida,
     String exameFisico,
-    String hipoteseDiagnostica,
-    String conduta,
-    String examesSolicitados,
-    String anamneseFormatada
+    String examesComplementares,
+    String impressaoDiagnostica, // Antigo 'hipoteseDiagnostica'
+    String conduta
 ) {}

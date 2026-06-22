@@ -10,4 +10,6 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
     
     List<Paciente> findByNomeContainingIgnoreCaseAndMedicoResponsavelId(String nome, UUID medicoId);
     
+    boolean existsByCpfAndMedicoResponsavelId(String cpf, UUID medicoId);
+    
 }

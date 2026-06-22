@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <style>
+        @page {
+            size: A4;
+            margin: 2.5cm 2cm;
+        }
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #1e293b;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #00c985;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+        .header h1 {
+            font-size: 18pt;
+            color: #00c985;
+            margin: 0 0 4px 0;
+        }
+        .header p {
+            font-size: 9pt;
+            color: #64748b;
+            margin: 2px 0;
+        }
+        .info-bar {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin-bottom: 24px;
+            font-size: 10pt;
+        }
+        .info-bar table {
+            width: 100%;
+        }
+        .info-bar td {
+            padding: 2px 8px;
+        }
+        .info-bar .label {
+            font-weight: bold;
+            color: #64748b;
+            width: 120px;
+        }
+        .info-bar .value {
+            color: #1e293b;
+        }
+        .documento {
+            white-space: pre-wrap;
+            font-size: 10.5pt;
+            line-height: 1.8;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 16px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            font-size: 8pt;
+            color: #94a3b8;
+        }
+        .assinatura {
+            margin-top: 60px;
+            text-align: center;
+        }
+        .assinatura .linha {
+            border-top: 1px solid #1e293b;
+            width: 250px;
+            margin: 0 auto 4px auto;
+        }
+        .assinatura p {
+            font-size: 10pt;
+            margin: 2px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Medic AI</h1>
+        <p>Prontuário Médico Digital</p>
+    </div>
+
+    <div class="info-bar">
+        <table>
+            <tr>
+                <td class="label">Paciente:</td>
+                <td class="value" th:text="${pacienteNome}">-</td>
+                <td class="label">Data:</td>
+                <td class="value" th:text="${dataConsulta}">-</td>
+            </tr>
+            <tr>
+                <td class="label">CPF:</td>
+                <td class="value" th:text="${pacienteCpf}">-</td>
+                <td class="label">Médico:</td>
+                <td class="value" th:text="${medicoNome}">-</td>
+            </tr>
+            <tr>
+                <td class="label">Idade:</td>
+                <td class="value" th:text="${pacienteIdade} + ' anos'">-</td>
+                <td class="label">CRM:</td>
+                <td class="value" th:text="${medicoCrm}">-</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="documento" th:text="${documento}">
+        Conteúdo do prontuário...
+    </div>
+
+    <div class="assinatura">
+        <div class="linha"></div>
+        <p th:text="${medicoNome}">Nome do Médico</p>
+        <p th:text="'CRM: ' + ${medicoCrm}">CRM</p>
+    </div>
+
+    <div class="footer">
+        <p>Documento gerado automaticamente por Medic AI. Revisão e assinatura do profissional responsável são obrigatórias.</p>
+    </div>
+</body>
+</html>
