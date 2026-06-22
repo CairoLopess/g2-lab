@@ -1,5 +1,7 @@
 package br.com.medic.controller;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -26,6 +28,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import br.com.medic.dto.ConsultaResponseDto;
 import br.com.medic.dto.CopilotoResponseDto;
 import br.com.medic.entity.Consulta;
+import br.com.medic.entity.Medico;
+import br.com.medic.enums.StatusConsulta;
 import br.com.medic.repository.ConsultaRepository;
 import br.com.medic.service.ConsultaService;
 import br.com.medic.service.DeepgramService;
@@ -133,6 +137,26 @@ public class ConsultaController {
         return ResponseEntity.ok().build();
     }
     
+    @GetMapping("/estatisticas")
+    public ResponseEntity<Map<String, Long>> getEstatisticas() {
+        Medico medico = (Medico) org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication().getPrincipal();
+        UUID medicoId = medico.getId();
+
+        LocalDateTime inicioDia = LocalDate.now().atStartOfDay();
+        LocalDateTime fimDia = inicioDia.plusDays(1);
+
+        long consultasHoje = consultaRepository.countByMedicoIdAndDataConsultaBetween(medicoId, inicioDia, fimDia);
+        long emAndamento = consultaRepository.countByMedicoIdAndStatus(medicoId, StatusConsulta.CRIADA);
+        long laudosHoje = consultaRepository.countByMedicoIdAndProntuarioGeradoAndDataConsultaBetween(medicoId, true, inicioDia, fimDia);
+
+        return ResponseEntity.ok(Map.of(
+                "consultasHoje", consultasHoje,
+                "emAndamento", emAndamento,
+                "laudosGerados", laudosHoje
+        ));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<ConsultaResponseDto> buscarPorId(@PathVariable Long id) {
         return consultaRepository.findById(id)

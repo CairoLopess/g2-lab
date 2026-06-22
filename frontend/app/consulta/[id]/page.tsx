@@ -333,10 +333,7 @@ export default function MedicDashboard() {
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: false, 
-          noiseSuppression: false, 
-          autoGainControl: false, 
-          sampleRate: 16000, 
+          sampleRate: 16000,
         },
       });
 

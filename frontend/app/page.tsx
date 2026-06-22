@@ -58,6 +58,9 @@
     const [historicoConsultas, setHistoricoConsultas] = useState<ConsultaHistorico[]>([]);
     const [isLoadingHistorico, setIsLoadingHistorico] = useState(false);
     
+    // Estatísticas
+    const [stats, setStats] = useState({ consultasHoje: 0, emAndamento: 0, laudosGerados: 0 });
+
     // Estados de Ação
     const [isStartingConsulta, setIsStartingConsulta] = useState<number | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -85,7 +88,22 @@
         setIsCheckingToken(false);
         setMedicoNome(localStorage.getItem('medic_nome') || "Doutor");
         fetchPacientes(token);
+        fetchEstatisticas(token);
     }, []);
+
+    const fetchEstatisticas = async (token: string) => {
+        try {
+            const res = await fetch(`${API_URL}/consultas/estatisticas`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setStats(data);
+            }
+        } catch (e) {
+            console.warn("Erro ao buscar estatísticas", e);
+        }
+    };
 
     const fetchPacientes = async (token: string) => {
         try {
@@ -300,9 +318,9 @@
             {/* ESTATÍSTICAS */}
             <div className="grid grid-cols-4 gap-6 mb-8 shrink-0">
                 <StatCard title="Total de Pacientes" value={pacientes.length.toString()} icon={<Users className="text-blue-500"/>} bg="bg-blue-50" />
-                <StatCard title="Consultas Hoje" value="0" icon={<Calendar className="text-[#00c985]"/>} bg="bg-emerald-50" />
-                <StatCard title="Em Espera" value="0" icon={<Clock className="text-amber-500"/>} bg="bg-amber-50" />
-                <StatCard title="Laudos Gerados" value="0" icon={<FileText className="text-purple-500"/>} bg="bg-purple-50" />
+                <StatCard title="Consultas Hoje" value={stats.consultasHoje.toString()} icon={<Calendar className="text-[#00c985]"/>} bg="bg-emerald-50" />
+                <StatCard title="Em Andamento" value={stats.emAndamento.toString()} icon={<Clock className="text-amber-500"/>} bg="bg-amber-50" />
+                <StatCard title="Laudos Gerados" value={stats.laudosGerados.toString()} icon={<FileText className="text-purple-500"/>} bg="bg-purple-50" />
             </div>
 
             {/* BARRA DE BUSCA */}
